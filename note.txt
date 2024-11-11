@@ -1,0 +1,549 @@
+To extract these features from a URL, I'll provide Python functions for each of these columns. Here’s a breakdown of what each feature might represent and the corresponding function you could use to retrieve it:
+
+1. **TLD_x (0 to 9)**: Top-Level Domain presence indicators (e.g., `.com`, `.org`). We’ll extract the TLD and encode it accordingly.
+2. **URLSimilarityIndex**: Measure of similarity between parts of the URL (could use string comparison metrics).
+3. **LetterRatioInURL**: Ratio of letters to the total characters in the URL.
+4. **NoOfOtherSpecialCharsInURL**: Count of special characters in the URL.
+5. **SpacialCharRatioInURL**: Ratio of special characters in the URL.
+6. **IsHTTPS**: Check if the URL uses HTTPS.
+7. **LineOfCode, LargestLineLength**: These likely refer to HTML properties; we'll simulate this.
+8. **DomainTitleMatchScore**: Measure of match between domain name and page title.
+9. **HasDescription, HasSocialNet, HasSubmitButton, HasCopyrightInfo**: Indicators of specific HTML elements.
+10. **NoOfImage, NoOfCSS, NoOfJS, NoOfSelfRef, NoOfExternalRef**: Counts of specific resource types and references.
+
+Here's the Python code:
+
+```python
+import re
+import requests
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+from collections import Counter
+import tldextract
+
+# Define a function to retrieve a webpage and parse HTML content
+def get_page_content(url):
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        return None
+
+# TLD encoding
+def extract_tld_encoding(url):
+    tld = tldextract.extract(url).suffix
+    tld_list = ['com', 'org', 'net', 'edu', 'gov', 'io', 'co', 'info', 'biz', 'xyz']  # Extend as needed
+    return [1 if tld == t else 0 for t in tld_list]
+
+# URL Similarity Index (simple Jaccard similarity example)
+def url_similarity_index(url):
+    parsed_url = urlparse(url)
+    path = parsed_url.path
+    return len(set(path)) / len(path) if path else 0
+
+# Ratio of letters in URL
+def letter_ratio_in_url(url):
+    letters = sum(c.isalpha() for c in url)
+    return letters / len(url)
+
+# Count of other special characters in URL
+def count_special_chars(url):
+    return sum(1 for c in url if not c.isalnum() and c not in '.:/')
+
+# Ratio of special characters in URL
+def special_char_ratio(url):
+    special_chars = count_special_chars(url)
+    return special_chars / len(url)
+
+# HTTPS check
+def is_https(url):
+    return 1 if urlparse(url).scheme == 'https' else 0
+
+# Simulating lines of code and largest line length in HTML
+def line_of_code_metrics(html_content):
+    lines = html_content.splitlines()
+    line_count = len(lines)
+    max_line_length = max(len(line) for line in lines) if lines else 0
+    return line_count, max_line_length
+
+# Domain-title match score (simple example based on presence of domain in title)
+def domain_title_match_score(url, html_content):
+    parsed_url = urlparse(url)
+    domain = parsed_url.hostname.split('.')[0]
+    soup = BeautifulSoup(html_content, 'html.parser')
+    title = soup.title.string if soup.title else ''
+    return 1 if domain.lower() in title.lower() else 0
+
+# Check for specific HTML elements
+def has_description(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return 1 if soup.find('meta', attrs={"name": "description"}) else 0
+
+def has_social_net(html_content):
+    social_keywords = ['facebook', 'twitter', 'instagram', 'linkedin']
+    return 1 if any(keyword in html_content.lower() for keyword in social_keywords) else 0
+
+def has_submit_button(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return 1 if soup.find('input', {'type': 'submit'}) else 0
+
+def has_copyright_info(html_content):
+    return 1 if "©" in html_content or "copyright" in html_content.lower() else 0
+
+# Counting specific resources
+def count_elements(html_content, tag, attr=None):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return len(soup.find_all(tag, attrs=attr))
+
+def count_self_references(html_content, url):
+    parsed_url = urlparse(url)
+    base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return sum(1 for link in soup.find_all('a', href=True) if link['href'].startswith(base_domain))
+
+def count_external_references(html_content, url):
+    parsed_url = urlparse(url)
+    base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return sum(1 for link in soup.find_all('a', href=True) if not link['href'].startswith(base_domain))
+
+# Main function to extract all features from a URL
+def extract_features(url):
+    html_content = get_page_content(url)
+    if not html_content:
+        return None  # or handle the case where the page could not be retrieved
+
+    features = {
+        "TLD": extract_tld_encoding(url),
+        "URLSimilarityIndex": url_similarity_index(url),
+        "LetterRatioInURL": letter_ratio_in_url(url),
+        "NoOfOtherSpecialCharsInURL": count_special_chars(url),
+        "SpacialCharRatioInURL": special_char_ratio(url),
+        "IsHTTPS": is_https(url),
+    }
+
+    line_count, max_line_length = line_of_code_metrics(html_content)
+    features["LineOfCode"] = line_count
+    features["LargestLineLength"] = max_line_length
+    features["DomainTitleMatchScore"] = domain_title_match_score(url, html_content)
+    features["HasDescription"] = has_description(html_content)
+    features["HasSocialNet"] = has_social_net(html_content)
+    features["HasSubmitButton"] = has_submit_button(html_content)
+    features["HasCopyrightInfo"] = has_copyright_info(html_content)
+    features["NoOfImage"] = count_elements(html_content, 'img')
+    features["NoOfCSS"] = count_elements(html_content, 'link', {'rel': 'stylesheet'})
+    features["NoOfJS"] = count_elements(html_content, 'script')
+    features["NoOfSelfRef"] = count_self_references(html_content, url)
+    features["NoOfExternalRef"] = count_external_references(html_content, url)
+
+    return features
+```
+
+### Explanation:
+- Each feature has a dedicated function for extraction.
+- The **main `extract_features`** function collects all features for a given URL.
+- For HTML-based features, we use BeautifulSoup to parse the content and count various tags.
+- Adjust `tld_list` as necessary if you need specific TLD encodings.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+To create a FastAPI application that can receive a URL, extract the required features, and use a pre-trained model (saved as a `.pkl` file) for predictions, follow these steps:
+
+1. Set up the FastAPI app and define routes.
+2. Load the model from the `.pkl` file.
+3. Extract the features from the URL using the previously defined functions.
+4. Use the extracted features as input to the model for prediction.
+
+Here's the complete code:
+
+### Directory Structure
+
+Assuming you have:
+- `model.pkl`: The saved machine learning model.
+- `main.py`: The main FastAPI application code.
+
+### FastAPI Code (main.py)
+
+```python
+import pickle
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict
+import requests
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+import tldextract
+
+app = FastAPI()
+
+# Load the pre-trained model
+with open("model.pkl", "rb") as model_file:
+    model = pickle.load(model_file)
+
+# Define the request and response models
+class URLRequest(BaseModel):
+    url: str
+
+class PredictionResponse(BaseModel):
+    prediction: int
+    features: Dict[str, float]
+
+# Function to retrieve a webpage and parse HTML content
+def get_page_content(url):
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        return None
+
+# Define all feature extraction functions (as provided previously)
+def extract_tld_encoding(url):
+    tld = tldextract.extract(url).suffix
+    tld_list = ['com', 'org', 'net', 'edu', 'gov', 'io', 'co', 'info', 'biz', 'xyz']  # Extend as needed
+    return [1 if tld == t else 0 for t in tld_list]
+
+def url_similarity_index(url):
+    parsed_url = urlparse(url)
+    path = parsed_url.path
+    return len(set(path)) / len(path) if path else 0
+
+def letter_ratio_in_url(url):
+    letters = sum(c.isalpha() for c in url)
+    return letters / len(url)
+
+def count_special_chars(url):
+    return sum(1 for c in url if not c.isalnum() and c not in '.:/')
+
+def special_char_ratio(url):
+    special_chars = count_special_chars(url)
+    return special_chars / len(url)
+
+def is_https(url):
+    return 1 if urlparse(url).scheme == 'https' else 0
+
+def line_of_code_metrics(html_content):
+    lines = html_content.splitlines()
+    line_count = len(lines)
+    max_line_length = max(len(line) for line in lines) if lines else 0
+    return line_count, max_line_length
+
+def domain_title_match_score(url, html_content):
+    parsed_url = urlparse(url)
+    domain = parsed_url.hostname.split('.')[0]
+    soup = BeautifulSoup(html_content, 'html.parser')
+    title = soup.title.string if soup.title else ''
+    return 1 if domain.lower() in title.lower() else 0
+
+def has_description(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return 1 if soup.find('meta', attrs={"name": "description"}) else 0
+
+def has_social_net(html_content):
+    social_keywords = ['facebook', 'twitter', 'instagram', 'linkedin']
+    return 1 if any(keyword in html_content.lower() for keyword in social_keywords) else 0
+
+def has_submit_button(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return 1 if soup.find('input', {'type': 'submit'}) else 0
+
+def has_copyright_info(html_content):
+    return 1 if "©" in html_content or "copyright" in html_content.lower() else 0
+
+def count_elements(html_content, tag, attr=None):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return len(soup.find_all(tag, attrs=attr))
+
+def count_self_references(html_content, url):
+    parsed_url = urlparse(url)
+    base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return sum(1 for link in soup.find_all('a', href=True) if link['href'].startswith(base_domain))
+
+def count_external_references(html_content, url):
+    parsed_url = urlparse(url)
+    base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    soup = BeautifulSoup(html_content, 'html.parser')
+    return sum(1 for link in soup.find_all('a', href=True) if not link['href'].startswith(base_domain))
+
+def extract_features(url):
+    html_content = get_page_content(url)
+    if not html_content:
+        raise HTTPException(status_code=404, detail="Unable to retrieve URL content")
+
+    features = {
+        "TLD": extract_tld_encoding(url),
+        "URLSimilarityIndex": url_similarity_index(url),
+        "LetterRatioInURL": letter_ratio_in_url(url),
+        "NoOfOtherSpecialCharsInURL": count_special_chars(url),
+        "SpacialCharRatioInURL": special_char_ratio(url),
+        "IsHTTPS": is_https(url),
+    }
+
+    line_count, max_line_length = line_of_code_metrics(html_content)
+    features["LineOfCode"] = line_count
+    features["LargestLineLength"] = max_line_length
+    features["DomainTitleMatchScore"] = domain_title_match_score(url, html_content)
+    features["HasDescription"] = has_description(html_content)
+    features["HasSocialNet"] = has_social_net(html_content)
+    features["HasSubmitButton"] = has_submit_button(html_content)
+    features["HasCopyrightInfo"] = has_copyright_info(html_content)
+    features["NoOfImage"] = count_elements(html_content, 'img')
+    features["NoOfCSS"] = count_elements(html_content, 'link', {'rel': 'stylesheet'})
+    features["NoOfJS"] = count_elements(html_content, 'script')
+    features["NoOfSelfRef"] = count_self_references(html_content, url)
+    features["NoOfExternalRef"] = count_external_references(html_content, url)
+
+    # Flatten the TLD encoding list into separate feature columns
+    tld_features = features.pop("TLD")
+    for i, tld_value in enumerate(tld_features):
+        features[f"TLD_{i}"] = tld_value
+
+    return features
+
+# Define prediction endpoint
+@app.post("/predict", response_model=PredictionResponse)
+def predict(url_request: URLRequest):
+    url = url_request.url
+    features = extract_features(url)
+
+    # Arrange features in the order expected by the model
+    feature_vector = list(features.values())
+
+    # Predict using the model
+    prediction = model.predict([feature_vector])[0]
+
+    return PredictionResponse(prediction=prediction, features=features)
+```
+
+### Explanation
+
+1. **Model Loading**:
+   - The model is loaded once when the app starts and is available for use across requests.
+
+2. **Feature Extraction**:
+   - Each feature extraction function works as described in the initial code.
+   - `extract_features` processes the URL and provides a dictionary of features required for prediction.
+
+3. **API Endpoint**:
+   - The `/predict` endpoint receives a URL as input and returns a JSON response with the model's prediction and extracted features.
+
+4. **Request and Response Models**:
+   - `URLRequest` defines the expected format for incoming data.
+   - `PredictionResponse` defines the structure of the prediction output, including the prediction and features.
+
+### Running the App
+
+To start the FastAPI server, save the code as `main.py` and run:
+
+```bash
+uvicorn main:app --reload
+```
+
+Access the API documentation at `http://127.0.0.1:8000/docs`.
+
+This setup should allow you to pass a URL, extract its features, and get a prediction using your pre-trained model.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Here's a simple HTML and JavaScript setup to call the FastAPI endpoint, allowing users to input a URL, submit it, and see whether it is classified as a phishing URL.
+
+### `index.html`
+
+This HTML file includes:
+- An input field for the URL.
+- A button to submit the URL.
+- A result display area that shows if the URL is predicted as phishing or not.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phishing URL Detector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .container {
+      max-width: 400px;
+      margin: auto;
+    }
+    .input-group {
+      margin-bottom: 10px;
+    }
+    .result {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .error {
+      color: red;
+    }
+    .success {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Phishing URL Detector</h1>
+    <div class="input-group">
+      <label for="url">Enter URL:</label>
+      <input type="text" id="url" placeholder="https://example.com">
+    </div>
+    <button onclick="checkUrl()">Check URL</button>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    async function checkUrl() {
+      // Clear any previous result
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = "";
+      
+      // Get URL from input field
+      const url = document.getElementById('url').value.trim();
+      
+      if (!url) {
+        resultDiv.textContent = "Please enter a URL.";
+        resultDiv.className = "result error";
+        return;
+      }
+
+      try {
+        // Call the FastAPI endpoint
+        const response = await fetch("http://127.0.0.1:8000/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ url })
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to connect to the server.");
+        }
+
+        const data = await response.json();
+        
+        // Display the result
+        const prediction = data.prediction;
+        if (prediction === 1) {
+          resultDiv.textContent = "Warning: This URL is classified as a phishing URL.";
+          resultDiv.className = "result error";
+        } else {
+          resultDiv.textContent = "Safe: This URL is not classified as phishing.";
+          resultDiv.className = "result success";
+        }
+
+      } catch (error) {
+        console.error("Error:", error);
+        resultDiv.textContent = "Error: " + error.message;
+        resultDiv.className = "result error";
+      }
+    }
+  </script>
+</body>
+</html>
+```
+
+### Explanation
+
+1. **HTML Layout**:
+   - An input field (`#url`) for users to enter the URL.
+   - A button that calls `checkUrl()` on click.
+
+2. **JavaScript Code**:
+   - The `checkUrl()` function retrieves the URL from the input field, validates it, and sends it to the FastAPI endpoint.
+   - The `fetch` function sends a POST request with the URL to `http://127.0.0.1:8000/predict`.
+   - It then waits for the response and updates the result area based on whether the prediction is `1` (phishing) or `0` (safe).
+   - Errors are handled and displayed to the user.
+
+3. **CSS Styling**:
+   - Basic styling is provided for a clean and responsive layout.
+   - Results are highlighted in red for phishing (`.error`) and green for safe (`.success`) URLs.
+
+### Running the Setup
+
+1. Start the FastAPI server using:
+
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+2. Open `index.html` in a web browser and test by entering URLs to see if they are classified as phishing or safe.
+
+3. **Note**: Ensure that CORS (Cross-Origin Resource Sharing) is allowed in FastAPI if you encounter any cross-origin errors. You can set up CORS in FastAPI as follows:
+
+   ```python
+   from fastapi.middleware.cors import CORSMiddleware
+
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["*"],  # Change to specific domains in production
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+   ```
+
+With this setup, users can enter URLs, and the app will interactively check for phishing.
